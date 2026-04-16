@@ -1,0 +1,92 @@
+[
+  {
+    "id": "TC001",
+    "description": "SQL Injection via string concatenation",
+    "language": "python",
+    "diff": "+ query = \"SELECT * FROM users WHERE username = '\" + username + \"'\"",
+    "expected_vulnerability": "SQL Injection",
+    "owasp_category": "A03:2021-Injection",
+    "severity": "High"
+  },
+  {
+    "id": "TC002",
+    "description": "Hardcoded password in source code",
+    "language": "python",
+    "diff": "+ password = \"admin123\"\n+ db_connect(user='root', password='admin123')",
+    "expected_vulnerability": "Hardcoded Credentials",
+    "owasp_category": "A07:2021-Identification and Authentication Failures",
+    "severity": "High"
+  },
+  {
+    "id": "TC003",
+    "description": "Use of eval() on user input",
+    "language": "python",
+    "diff": "+ result = eval(user_input)",
+    "expected_vulnerability": "Code Injection via eval",
+    "owasp_category": "A03:2021-Injection",
+    "severity": "High"
+  },
+  {
+    "id": "TC004",
+    "description": "OS command injection using os.system",
+    "language": "python",
+    "diff": "+ import os\n+ os.system('ping ' + user_input)",
+    "expected_vulnerability": "Command Injection",
+    "owasp_category": "A03:2021-Injection",
+    "severity": "High"
+  },
+  {
+    "id": "TC005",
+    "description": "Hardcoded secret API key",
+    "language": "python",
+    "diff": "+ API_KEY = \"sk-abc123supersecretkey9999\"",
+    "expected_vulnerability": "Hardcoded Credentials",
+    "owasp_category": "A07:2021-Identification and Authentication Failures",
+    "severity": "Medium"
+  },
+  {
+    "id": "TC006",
+    "description": "SQL injection using format string",
+    "language": "python",
+    "diff": "+ cursor.execute(\"SELECT * FROM orders WHERE id = %s\" % order_id)",
+    "expected_vulnerability": "SQL Injection",
+    "owasp_category": "A03:2021-Injection",
+    "severity": "High"
+  },
+  {
+    "id": "TC007",
+    "description": "Subprocess with shell=True and user input",
+    "language": "python",
+    "diff": "+ import subprocess\n+ subprocess.call(user_cmd, shell=True)",
+    "expected_vulnerability": "Command Injection",
+    "owasp_category": "A03:2021-Injection",
+    "severity": "High"
+  },
+  {
+    "id": "TC008",
+    "description": "Safe parameterized SQL query - no vulnerability",
+    "language": "python",
+    "diff": "+ cursor.execute(\"SELECT * FROM users WHERE id = ?\", (user_id,))",
+    "expected_vulnerability": "None",
+    "owasp_category": "None",
+    "severity": "None"
+  },
+  {
+    "id": "TC009",
+    "description": "Safe password hashing using bcrypt - no vulnerability",
+    "language": "python",
+    "diff": "+ import bcrypt\n+ hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())",
+    "expected_vulnerability": "None",
+    "owasp_category": "None",
+    "severity": "None"
+  },
+  {
+    "id": "TC010",
+    "description": "Insecure deserialization using pickle",
+    "language": "python",
+    "diff": "+ import pickle\n+ obj = pickle.loads(user_data)",
+    "expected_vulnerability": "Insecure Deserialization",
+    "owasp_category": "A08:2021-Software and Data Integrity Failures",
+    "severity": "High"
+  }
+]
