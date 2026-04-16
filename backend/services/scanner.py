@@ -1,135 +1,63 @@
+import os
 import time
+import json
+from groq import Groq
 from models import ScanRequest, ScanResponse, Finding
 
-
-def extract_added_lines(diff: str):
-    """Extract only added lines from git diff"""
-    return [line[1:] for line in diff.split("\n") if line.startswith("+")]
-
+# Initialize the Groq client using the Environment Variable
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def scan_diff(request: ScanRequest) -> ScanResponse:
     start_time = time.time()
+    
+    # This prompt tells the AI exactly how to behave and what format to return
+    prompt = f"""
+    You are a DevSecOps Security Expert. Analyze the following code diff for security vulnerabilities in {request.language}.
+    
+    RULES:
+    1. Identify SQL injection, hardcoded secrets, OS injection, and XSS.
+    2. You MUST return ONLY a valid JSON object.
+    3. The JSON must have:
+       - "findings": a list of objects containing (file, line, owasp_category, severity, explanation, fix_before, fix_after)
+       - "decision": "FAIL" if any HIGH severity issues are found, otherwise "PASS".
 
-    raw_diff = request.diff
-    lines = extract_added_lines(raw_diff)
+    DIFF TO ANALYZE:
+    {request.diff}
+    """
 
-    findings = []
-
-    for i, line in enumerate(lines):
-        diff = line.lower()
-
-        # -------------------------------
-        # 🟢 SAFE CASE (avoid false positives)
-        # -------------------------------
-        if "cursor.execute" in diff and "?" in diff:
-            continue  # safe parameterized query
-
-        # -------------------------------
-        # 🔴 SQL Injection
-        # -------------------------------
-        if "select" in diff and any(op in line for op in ["+", "%"]):
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="SQL query constructed using string concatenation, allowing injection.",
-                fix_before=line,
-                fix_after="Use parameterized queries: cursor.execute('SELECT * FROM users WHERE id=%s', (user_id,))"
-            ))
-
-        if "select" in diff and "%" in diff:
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="SQL query uses string formatting which can lead to injection.",
-                fix_before=line,
-                fix_after="Use parameterized queries instead of string formatting."
-            ))
-
-        # -------------------------------
-        # 🔴 Hardcoded Secrets
-        # -------------------------------
-        if any(k in diff for k in ["password", "api_key", "secret", "token"]):
-            if "=" in diff and any(x in diff for x in ["'", '"']):
-                findings.append(Finding(
-                    file="diff_input",
-                    line=i + 1,
-                    owasp_category="A07:2021-Identification and Authentication Failures",
-                    severity="HIGH",
-                    explanation="Hardcoded sensitive credential detected in code.",
-                    fix_before=line,
-                    fix_after="Use environment variables: os.getenv('SECRET_NAME')"
-                ))
-
-        # -------------------------------
-        # 🔴 eval() Injection
-        # -------------------------------
-        if "eval(" in diff:
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="Use of eval() on user input can lead to arbitrary code execution.",
-                fix_before=line,
-                fix_after="Avoid eval(); use safe parsing like ast.literal_eval"
-            ))
-
-        # -------------------------------
-        # 🔴 OS Command Injection
-        # -------------------------------
-        if "os.system" in diff:
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="os.system() with user input can lead to command injection.",
-                fix_before=line,
-                fix_after="Use subprocess with argument list and no shell=True"
-            ))
-
-        # -------------------------------
-        # 🔴 subprocess shell=True
-        # -------------------------------
-        if "subprocess" in diff and "shell=true" in diff.replace(" ", ""):
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="subprocess with shell=True can lead to command injection.",
-                fix_before=line,
-                fix_after="Set shell=False and pass arguments as a list"
-            ))
-
-        # -------------------------------
-        # 🔴 Insecure Deserialization
-        # -------------------------------
-        if "pickle.loads" in diff:
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A08:2021-Software and Data Integrity Failures",
-                severity="HIGH",
-                explanation="pickle.loads() on untrusted input can lead to code execution.",
-                fix_before=line,
-                fix_after="Use safer formats like JSON instead of pickle"
-            ))
-
-    # -------------------------------
-    # 🚦 Decision Logic
-    # -------------------------------
-    if any(f.severity == "HIGH" for f in findings):
-        decision = "FAIL"
-    else:
-        decision = "PASS"
+    try:
+        # Call Groq AI
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a professional security auditor that outputs only JSON."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            model="llama3-8b-8192",
+            response_format={"type": "json_object"} # Ensures we get clean JSON
+        )
+        
+        # Parse the AI response
+        ai_response_content = chat_completion.choices[0].message.content
+        ai_data = json.loads(ai_response_content)
+        
+        # Convert JSON findings into our Python Finding objects
+        findings = [Finding(**f) for f in ai_data.get("findings", [])]
+        decision = ai_data.get("decision", "PASS")
+        
+    except Exception as e:
+        print(f"Error calling Groq API: {e}")
+        # Fallback if AI fails
+        findings = []
+        decision = "ERROR"
 
     end_time = time.time()
-
+    
     return ScanResponse(
         findings=findings,
         decision=decision,
