@@ -1,16 +1,12 @@
 import os
 import sqlite3
 
-# WRONG: Hardcoded Secret
-API_KEY = "sk-12345-secret-key-donot-share"
+# Safe: Using environment variables
+API_KEY = os.getenv("MY_API_KEY")
 
 def get_user(user_id):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    # WRONG: SQL Injection (string concatenation)
-    cursor.execute("SELECT * FROM users WHERE id = " + user_id)
+    # Safe: Using parameterized queries
+    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     return cursor.fetchone()
-
-def ping_host(ip):
-    # WRONG: Command Injection
-    os.system("ping -c 1 " + ip)
