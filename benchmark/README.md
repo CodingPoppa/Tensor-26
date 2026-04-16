@@ -170,7 +170,7 @@ This reads `dataset.json` + `results.json` and prints a full report:
 
 ---
 
-## Benchmark Targets (Hackathon Criteria)
+## Benchmark Targets 
 
 | Metric | Target |
 |---|---|
