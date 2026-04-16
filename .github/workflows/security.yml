@@ -25,17 +25,23 @@ jobs:
 
       - name: Run vulnerability scan
         run: |
-          # 1. Create a safe JSON payload using jq (handles newlines/quotes)
-          jq -n --arg d "$(cat diff.txt)" --arg l "python" \
+          echo "===== GENERATING PAYLOAD ====="
+
+          # Create JSON payload safely
+          jq -n \
+            --arg d "$(cat diff.txt)" \
+            --arg l "python" \
             '{diff: $d, language: $l}' > payload.json
 
-          # 2. POST the file content to your ngrok URL
+          echo "===== SENDING TO AI SCANNER ====="
+
+          # 🔥 IMPORTANT: YOUR NGROK URL HERE
           RESPONSE=$(curl -s -X POST https://idiocy-circulate-erasure.ngrok-free.dev/api/scan \
             -H "Content-Type: application/json" \
             -d @payload.json)
 
-          # 3. Save response for the next steps
           echo "$RESPONSE" > result.json
+
           echo "===== SCAN RESULT ====="
           cat result.json
 
@@ -52,15 +58,20 @@ jobs:
               comment += "✅ No vulnerabilities found! Code looks secure.\n";
             } else {
               comment += `⚠️ **${result.findings.length} Vulnerabilities Detected**\n\n`;
+
               result.findings.forEach((v, i) => {
                 comment += `### ${i + 1}. ${v.owasp_category}\n`;
-                comment += `- **Severity:** ${v.severity}\n`;
-                comment += `- **Issue:** ${v.explanation}\n`;
-                comment += `\n**Recommended Fix:**\n\`\`\`python\n${v.fix_after}\n\`\`\`\n\n---\n`;
+                comment += `- 📁 File: ${v.file}\n`;
+                comment += `- 📍 Line: ${v.line}\n`;
+                comment += `- ⚠️ Severity: ${v.severity}\n`;
+                comment += `- 💡 Issue: ${v.explanation}\n`;
+
+                comment += `\n🔧 **Recommended Fix:**\n\`\`\`python\n${v.fix_after}\n\`\`\`\n\n---\n`;
               });
             }
 
-            comment += `\n⏱️ Scan Time: ${result.scan_time_ms}ms | Decision: **${result.decision}**`;
+            comment += `\n⏱️ Scan Time: ${result.scan_time_ms}ms`;
+            comment += `\n🚦 Decision: **${result.decision}**`;
 
             github.rest.issues.createComment({
               ...context.repo,
@@ -73,4 +84,6 @@ jobs:
           if grep -q '"decision":"FAIL"' result.json; then
             echo "❌ Critical vulnerabilities found. Blocking PR merge."
             exit 1
+          else
+            echo "✅ No critical issues found."
           fi
