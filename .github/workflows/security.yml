@@ -13,39 +13,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout full repo (fixes bad object error)
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      # 2️⃣ Get PR diff (SAFE VERSION - no SHA issue)
       - name: Get PR diff
         run: |
           git fetch origin ${{ github.event.pull_request.base.ref }}
           git diff origin/${{ github.event.pull_request.base.ref }} > diff.txt
 
-      # 3️⃣ Show diff (debug)
-      - name: Show diff
-        run: |
-          echo "===== DIFF START ====="
-          cat diff.txt
-          echo "===== DIFF END ====="
-
-      # 4️⃣ Call your backend API
       - name: Run vulnerability scan
         run: |
-          DIFF=$(cat diff.txt | sed 's/"/\\"/g')
+          # 1. Create a safe JSON payload using jq (handles newlines/quotes)
+          jq -n --arg d "$(cat diff.txt)" --arg l "python" \
+            '{diff: $d, language: $l}' > payload.json
 
+          # 2. POST the file content to your ngrok URL
           RESPONSE=$(curl -s -X POST https://idiocy-circulate-erasure.ngrok-free.dev/api/scan \
-          -H "Content-Type: application/json" \
-          -d "{\"diff\":\"$DIFF\",\"language\":\"python\"}")
+            -H "Content-Type: application/json" \
+            -d @payload.json)
 
+          # 3. Save response for the next steps
           echo "$RESPONSE" > result.json
           echo "===== SCAN RESULT ====="
-          echo "$RESPONSE"
+          cat result.json
 
-      # 5️⃣ Post PR comment
       - name: Post PR comment
         uses: actions/github-script@v6
         with:
@@ -53,21 +46,21 @@ jobs:
             const fs = require('fs');
             const result = JSON.parse(fs.readFileSync('result.json', 'utf8'));
 
-            let comment = "## 🔒 AI Security Scan Report\n\n";
+            let comment = "## 🛡️ AI Security Scan Report\n\n";
 
             if (!result.findings || result.findings.length === 0) {
-              comment += "✅ No vulnerabilities found!\n";
+              comment += "✅ No vulnerabilities found! Code looks secure.\n";
             } else {
+              comment += `⚠️ **${result.findings.length} Vulnerabilities Detected**\n\n`;
               result.findings.forEach((v, i) => {
-                comment += `### ${i + 1}. ${v.owasp_category} (${v.severity})\n`;
-                comment += `📁 File: ${v.file} | Line: ${v.line}\n`;
-                comment += `⚠️ ${v.explanation}\n\n`;
-                comment += `💡 Fix:\n`;
-                comment += `\n${v.fix_before}\n↓\n${v.fix_after}\n\n`;
+                comment += `### ${i + 1}. ${v.owasp_category}\n`;
+                comment += `- **Severity:** ${v.severity}\n`;
+                comment += `- **Issue:** ${v.explanation}\n`;
+                comment += `\n**Recommended Fix:**\n\`\`\`python\n${v.fix_after}\n\`\`\`\n\n---\n`;
               });
             }
 
-            comment += `\n---\n🧠 Decision: **${result.decision || "UNKNOWN"}**`;
+            comment += `\n⏱️ Scan Time: ${result.scan_time_ms}ms | Decision: **${result.decision}**`;
 
             github.rest.issues.createComment({
               ...context.repo,
@@ -75,12 +68,9 @@ jobs:
               body: comment
             });
 
-      # 6️⃣ Fail CI if vulnerabilities found
       - name: Fail if vulnerabilities detected
         run: |
           if grep -q '"decision":"FAIL"' result.json; then
-            echo "❌ Vulnerabilities detected — failing pipeline"
+            echo "❌ Critical vulnerabilities found. Blocking PR merge."
             exit 1
-          else
-            echo "✅ No critical vulnerabilities"
           fi
