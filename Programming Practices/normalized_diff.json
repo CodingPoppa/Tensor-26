@@ -1,0 +1,19 @@
+{
+  "commit_id": "abc123",
+  "language": "python",
+  "files": [
+    {
+      "file_path": "app/login.py",
+      "changed_lines": [
+        {
+          "line_number": 14,
+          "content": "query = \"SELECT * FROM users WHERE name = '\" + username + \"'\""
+        },
+        {
+          "line_number": 15,
+          "content": "cursor.execute(query)"
+        }
+      ]
+    }
+  ]
+}

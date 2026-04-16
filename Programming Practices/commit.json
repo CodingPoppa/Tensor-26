@@ -1,0 +1,7 @@
+{
+  "commit_id": "abc123",
+  "repo": "team-genesis-demo",
+  "language": "python",
+  "diff_file": "data/diff.txt",
+  "timestamp": "2026-04-16T12:00:00Z"
+}
