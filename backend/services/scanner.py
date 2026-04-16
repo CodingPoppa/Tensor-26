@@ -1,133 +1,94 @@
 import time
 from models import ScanRequest, ScanResponse, Finding
 
-
 def extract_added_lines(diff: str):
-    """Extract only added lines from git diff"""
-    return [line[1:] for line in diff.split("\n") if line.startswith("+")]
-
+    """
+    Extracts only added lines, removing the '+' prefix and stripping 
+    leading/trailing whitespace to handle indented code.
+    """
+    lines = []
+    for line in diff.split("\n"):
+        # Skip git headers (e.g., +++ b/main.py) and take only added lines (+)
+        if line.startswith("+") and not line.startswith("+++"):
+            # Remove the '+' and whitespace
+            clean_line = line[1:].strip()
+            if clean_line:  # Avoid empty lines
+                lines.append(clean_line)
+    return lines
 
 def scan_diff(request: ScanRequest) -> ScanResponse:
     start_time = time.time()
-
     raw_diff = request.diff
     lines = extract_added_lines(raw_diff)
-
     findings = []
 
     for i, line in enumerate(lines):
-        diff = line.lower()
-
-        # -------------------------------
-        # 🟢 SAFE CASE (avoid false positives)
-        # -------------------------------
-        if "cursor.execute" in diff and "?" in diff:
-            continue  # safe parameterized query
+        # Use a lowercase version for matching logic
+        low_line = line.lower()
 
         # -------------------------------
         # 🔴 SQL Injection
         # -------------------------------
-        if "select" in diff and any(op in line for op in ["+", "%"]):
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="SQL query constructed using string concatenation, allowing injection.",
-                fix_before=line,
-                fix_after="Use parameterized queries: cursor.execute('SELECT * FROM users WHERE id=%s', (user_id,))"
-            ))
-
-        if "select" in diff and "%" in diff:
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="SQL query uses string formatting which can lead to injection.",
-                fix_before=line,
-                fix_after="Use parameterized queries instead of string formatting."
-            ))
+        # Detects both string concatenation (+) and f-strings/formatting (%)
+        if ("select" in low_line or "delete" in low_line) and any(op in low_line for op in ["+", "%", "f\"", "f'"]):
+            # Ignore if it looks like a safe parameterized query
+            if "?" not in low_line and "%s" not in low_line:
+                findings.append(Finding(
+                    file="diff_input",
+                    line=i + 1,
+                    owasp_category="A03:2021-Injection",
+                    severity="HIGH",
+                    explanation="SQL query constructed using unsafe string concatenation or formatting.",
+                    fix_before=line,
+                    fix_after="Use parameterized queries: cursor.execute('SELECT * FROM users WHERE id=%s', (user_id,))"
+                ))
 
         # -------------------------------
         # 🔴 Hardcoded Secrets
         # -------------------------------
-        if any(k in diff for k in ["password", "api_key", "secret", "token"]):
-            if "=" in diff and any(x in diff for x in ["'", '"']):
+        # Catching keywords like 'password' or 'token' followed by an assignment
+        if any(k in low_line for k in ["password", "api_key", "secret", "token"]):
+            if "=" in low_line and ("'" in low_line or '"' in low_line):
                 findings.append(Finding(
                     file="diff_input",
                     line=i + 1,
                     owasp_category="A07:2021-Identification and Authentication Failures",
                     severity="HIGH",
-                    explanation="Hardcoded sensitive credential detected in code.",
+                    explanation="Hardcoded sensitive credential detected.",
                     fix_before=line,
                     fix_after="Use environment variables: os.getenv('SECRET_NAME')"
                 ))
 
         # -------------------------------
-        # 🔴 eval() Injection
+        # 🔴 OS/Command Injection
         # -------------------------------
-        if "eval(" in diff:
+        if "os.system(" in low_line or ("subprocess" in low_line and "shell=true" in low_line.replace(" ", "")):
             findings.append(Finding(
                 file="diff_input",
                 line=i + 1,
                 owasp_category="A03:2021-Injection",
                 severity="HIGH",
-                explanation="Use of eval() on user input can lead to arbitrary code execution.",
+                explanation="Execution of OS commands with potentially unsanitized input.",
                 fix_before=line,
-                fix_after="Avoid eval(); use safe parsing like ast.literal_eval"
+                fix_after="Use subprocess.run() with a list of arguments and shell=False"
             ))
 
         # -------------------------------
-        # 🔴 OS Command Injection
+        # 🔴 Eval & Deserialization
         # -------------------------------
-        if "os.system" in diff:
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="os.system() with user input can lead to command injection.",
-                fix_before=line,
-                fix_after="Use subprocess with argument list and no shell=True"
-            ))
-
-        # -------------------------------
-        # 🔴 subprocess shell=True
-        # -------------------------------
-        if "subprocess" in diff and "shell=true" in diff.replace(" ", ""):
-            findings.append(Finding(
-                file="diff_input",
-                line=i + 1,
-                owasp_category="A03:2021-Injection",
-                severity="HIGH",
-                explanation="subprocess with shell=True can lead to command injection.",
-                fix_before=line,
-                fix_after="Set shell=False and pass arguments as a list"
-            ))
-
-        # -------------------------------
-        # 🔴 Insecure Deserialization
-        # -------------------------------
-        if "pickle.loads" in diff:
+        if "eval(" in low_line or "pickle.loads(" in low_line:
             findings.append(Finding(
                 file="diff_input",
                 line=i + 1,
                 owasp_category="A08:2021-Software and Data Integrity Failures",
                 severity="HIGH",
-                explanation="pickle.loads() on untrusted input can lead to code execution.",
+                explanation="Unsafe execution or deserialization detected.",
                 fix_before=line,
-                fix_after="Use safer formats like JSON instead of pickle"
+                fix_after="Use safe alternatives like ast.literal_eval() or JSON parsing."
             ))
 
-    # -------------------------------
-    # 🚦 Decision Logic
-    # -------------------------------
-    if any(f.severity == "HIGH" for f in findings):
-        decision = "FAIL"
-    else:
-        decision = "PASS"
-
+    # Decision logic
+    decision = "FAIL" if any(f.severity == "HIGH" for f in findings) else "PASS"
     end_time = time.time()
 
     return ScanResponse(
