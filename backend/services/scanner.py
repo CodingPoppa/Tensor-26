@@ -27,7 +27,7 @@ def scan_diff(request: ScanRequest) -> ScanResponse:
         # -------------------------------
         # 🔴 SQL Injection
         # -------------------------------
-        if "select" in diff and "+" in diff:
+        if "select" in diff and any(op in line for op in ["+", "%"]):
             findings.append(Finding(
                 file="diff_input",
                 line=i + 1,
@@ -95,7 +95,7 @@ def scan_diff(request: ScanRequest) -> ScanResponse:
         # -------------------------------
         # 🔴 subprocess shell=True
         # -------------------------------
-        if "subprocess" in diff and "shell=true" in diff:
+        if "subprocess" in diff and "shell=true" in diff.replace(" ", ""):
             findings.append(Finding(
                 file="diff_input",
                 line=i + 1,
