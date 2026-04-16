@@ -44,3 +44,31 @@ jobs:
           else
             echo "✅ No critical vulnerabilities"
           fi
+      - name: Post PR comment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('result.json', 'utf8'));
+
+            let comment = "## 🔒 AI Security Scan Report\n\n";
+
+            if (!result.findings || result.findings.length === 0) {
+              comment += "✅ No vulnerabilities found!\n";
+            } else {
+              result.findings.forEach((v, i) => {
+                comment += `### ${i + 1}. ${v.owasp_category} (${v.severity})\n`;
+                comment += `📁 File: ${v.file} | Line: ${v.line}\n`;
+                comment += `⚠️ ${v.explanation}\n\n`;
+                comment += `💡 Fix:\n`;
+                comment += `\`\`\`\n${v.fix_before}\n↓\n${v.fix_after}\n\`\`\`\n\n`;
+              });
+            }
+
+            comment += `\n---\n🧠 Decision: **${result.decision || "UNKNOWN"}**`;
+
+            github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
