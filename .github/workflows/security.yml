@@ -9,16 +9,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Get git diff
+      # 2️⃣ Extract diff between PR and base branch
+      - name: Get PR diff
         run: |
-          git fetch origin main
-          git diff origin/main > diff.txt
+          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > diff.txt
 
-      - name: Show diff (for testing)
+      # 3️⃣ Show diff (debugging)
+      - name: Show diff
         run: |
           echo "===== DIFF START ====="
           cat diff.txt
           echo "===== DIFF END ====="
+
+      # 4️⃣ Send diff to your backend and evaluate result
+      - name: Run vulnerability scan
+        run: |
+          DIFF=$(cat diff.txt | sed 's/"/\\"/g')
+
+          RESPONSE=$(curl -s -X POST https://YOUR_BACKEND_URL/api/scan \
+          -H "Content-Type: application/json" \
+          -d "{\"diff\":\"$DIFF\",\"language\":\"python\"}")
+
+          echo "===== SCAN RESULT ====="
+          echo $RESPONSE
+
+          # Fail CI if vulnerabilities found
+          if echo $RESPONSE | grep -q '"decision":"FAIL"'; then
+            echo "❌ Vulnerabilities detected — failing pipeline"
+            exit 1
+          else
+            echo "✅ No critical vulnerabilities"
+          fi
