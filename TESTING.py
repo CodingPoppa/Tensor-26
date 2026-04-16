@@ -1,18 +1,38 @@
 import os
 import sqlite3
+import subprocess
+import pickle
 
 def get_user(user_id):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
 
-    # SAFE: parameterized query (no SQL injection)
-    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    result = cursor.fetchone()
+    # ❌ SQL Injection
+    query = "SELECT * FROM users WHERE id = " + user_id
+    cursor.execute(query)
 
-    conn.close()
-    return result
+    return cursor.fetchone()
 
 
-def run_command():
-    # SAFE: controlled command
-    os.system("echo Hello World")
+# ❌ Hardcoded password
+password = "123456"
+
+
+# ❌ Command injection risk
+def run_command(user_input):
+    os.system("ls " + user_input)
+
+
+# ❌ Dangerous subprocess
+def run_shell(cmd):
+    subprocess.run(cmd, shell=True)
+
+
+# ❌ Unsafe deserialization
+def load_data(data):
+    return pickle.loads(data)
+
+
+# ❌ Dangerous eval
+def execute(code):
+    eval(code)
