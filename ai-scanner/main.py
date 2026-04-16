@@ -2,7 +2,7 @@ from google import genai
 from prompts import MAIN_PROMPT
 
 # Create client
-client = genai.Client(api_key="Api")
+client = genai.Client(api_key="API KEY IS NOT THERE")
 
 # Read code
 with open("test_diff.txt", "r") as f:
