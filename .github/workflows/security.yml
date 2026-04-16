@@ -9,23 +9,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
+      # 1️⃣ Checkout FULL repo history (fixes diff error)
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      # 2️⃣ Extract diff from PR
+      # 2️⃣ Get diff properly (safe version)
       - name: Get PR diff
         run: |
-          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > diff.txt
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git diff origin/${{ github.event.pull_request.base.ref }} > diff.txt
 
-      # 3️⃣ Show diff (for debugging)
+      # 3️⃣ Show diff (debug)
       - name: Show diff
         run: |
           echo "===== DIFF START ====="
           cat diff.txt
           echo "===== DIFF END ====="
 
-      # 4️⃣ Send diff to backend + evaluate result
+      # 4️⃣ Call your backend API
       - name: Run vulnerability scan
         run: |
           DIFF=$(cat diff.txt | sed 's/"/\\"/g')
@@ -34,11 +37,44 @@ jobs:
           -H "Content-Type: application/json" \
           -d "{\"diff\":\"$DIFF\",\"language\":\"python\"}")
 
+          echo "$RESPONSE" > result.json
           echo "===== SCAN RESULT ====="
-          echo $RESPONSE
+          echo "$RESPONSE"
 
-          # Fail CI if vulnerabilities found
-          if echo $RESPONSE | grep -q '"decision":"FAIL"'; then
+      # 5️⃣ Post PR comment (FIXED SCRIPT)
+      - name: Post PR comment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('result.json', 'utf8'));
+
+            let comment = "## 🔒 AI Security Scan Report\n\n";
+
+            if (!result.findings || result.findings.length === 0) {
+              comment += "✅ No vulnerabilities found!\n";
+            } else {
+              result.findings.forEach((v, i) => {
+                comment += `### ${i + 1}. ${v.owasp_category} (${v.severity})\n`;
+                comment += `📁 File: ${v.file} | Line: ${v.line}\n`;
+                comment += `⚠️ ${v.explanation}\n\n`;
+                comment += `💡 Fix:\n`;
+                comment += `\n${v.fix_before}\n↓\n${v.fix_after}\n\n`;
+              });
+            }
+
+            comment += `\n---\n🧠 Decision: **${result.decision || "UNKNOWN"}**`;
+
+            github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+
+      # 6️⃣ Fail pipeline if vulnerability found
+      - name: Fail if vulnerabilities detected
+        run: |
+          if grep -q '"decision":"FAIL"' result.json; then
             echo "❌ Vulnerabilities detected — failing pipeline"
             exit 1
           else
