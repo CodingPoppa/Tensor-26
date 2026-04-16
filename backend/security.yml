@@ -1,0 +1,104 @@
+name: DevSecOps Scanner
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+    types: [opened, synchronize, reopened]
+
+jobs:
+  security-scan:
+    name: DevSecOps Scanner
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout full repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2️⃣ Extract git diff between base and head
+      - name: Extract git diff
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }} > diff.txt
+          echo "Diff extracted successfully."
+          echo "===== DIFF START ====="
+          cat diff.txt
+          echo "===== DIFF END ====="
+
+      # 3️⃣ Send diff to Backend Scanner
+      - name: Send diff to Backend Scanner
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "::error::BACKEND_URL secret is not set!"
+            exit 1
+          fi
+
+          # Safe conversion of raw diff text into JSON payload
+          JSON_PAYLOAD=$(jq -n \
+            --arg diff "$(<diff.txt)" \
+            --arg lang "python" \
+            '{"diff": $diff, "language": $lang}')
+
+          # POST to scanner backend
+          curl -s -X POST "$BACKEND_URL/api/scan" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD" \
+            -o response.json
+
+          echo "===== RAW RESPONSE ====="
+          cat response.json
+          echo "========================"
+
+      # 4️⃣ Post PR comment with findings
+      - name: Post PR comment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('response.json', 'utf8'));
+
+            let comment = "## 🔒 AI Security Scan Report\n\n";
+
+            if (!result.findings || result.findings.length === 0) {
+              comment += "✅ No vulnerabilities found!\n";
+            } else {
+              result.findings.forEach((v, i) => {
+                comment += `### ${i + 1}. ${v.owasp_category} (${v.severity})\n`;
+                comment += `📁 File: ${v.file} | Line: ${v.line}\n`;
+                comment += `⚠️ ${v.explanation}\n\n`;
+                comment += `💡 Fix:\n`;
+                comment += `\n${v.fix_before}\n↓\n${v.fix_after}\n\n`;
+              });
+
+              comment += `\n---\n🧠 Decision: **${result.decision || "UNKNOWN"}**`;
+            }
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+
+      # 5️⃣ Fail CI if decision is FAIL
+      - name: Fail if vulnerabilities detected
+        run: |
+          DECISION=$(jq -r '.decision' response.json)
+          echo "Security Decision: $DECISION"
+
+          if [ "$DECISION" = "FAIL" ]; then
+            echo "::error::Vulnerability scan failed with HIGH severity issues! Check findings."
+            exit 1
+          else
+            echo "✅ No critical vulnerabilities according to scanner decision."
+          fi
