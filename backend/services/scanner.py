@@ -1,65 +1,75 @@
 import os
 import time
 import json
+import re
 from groq import Groq
 from models import ScanRequest, ScanResponse, Finding
 
-# Initialize the Groq client using the Environment Variable
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def scan_diff(request: ScanRequest) -> ScanResponse:
     start_time = time.time()
     
-    # This prompt tells the AI exactly how to behave and what format to return
-    prompt = f"""
-    You are a DevSecOps Security Expert. Analyze the following code diff for security vulnerabilities in {request.language}.
-    
-    RULES:
-    1. Identify SQL injection, hardcoded secrets, OS injection, and XSS.
-    2. You MUST return ONLY a valid JSON object.
-    3. The JSON must have:
-       - "findings": a list of objects containing (file, line, owasp_category, severity, explanation, fix_before, fix_after)
-       - "decision": "FAIL" if any HIGH severity issues are found, otherwise "PASS".
+    # SYSTEM PROMPT: Forces the AI to be a strict JSON-only security bot
+    system_message = (
+        "You are a Senior DevSecOps Engineer. Analyze code diffs for OWASP vulnerabilities. "
+        "You must output ONLY valid JSON. Do not include markdown code blocks (like ```json). "
+        "Always provide a 'decision' of either 'PASS' or 'FAIL'."
+    )
 
-    DIFF TO ANALYZE:
+    # USER PROMPT: Provides context and the actual diff
+    user_prompt = f"""
+    Analyze this {request.language} git diff. 
+    Look for: SQL Injection, Hardcoded Credentials, XSS, and Unsafe Deserialization.
+
+    JSON Structure to follow:
+    {{
+        "findings": [
+            {{
+                "file": "filename",
+                "line": 10,
+                "owasp_category": "A03:2021-Injection",
+                "severity": "HIGH",
+                "explanation": "Brief description",
+                "fix_before": "unsafe code",
+                "fix_after": "safe code"
+            }}
+        ],
+        "decision": "FAIL"
+    }}
+
+    DIFF:
     {request.diff}
     """
 
     try:
-        # Call Groq AI
-        chat_completion = client.chat.completions.create(
+        completion = client.chat.completions.create(
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are a professional security auditor that outputs only JSON."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_prompt}
             ],
             model="llama3-8b-8192",
-            response_format={"type": "json_object"} # Ensures we get clean JSON
+            temperature=0.1, # Lower temperature = higher accuracy
+            response_format={"type": "json_object"} 
         )
         
-        # Parse the AI response
-        ai_response_content = chat_completion.choices[0].message.content
-        ai_data = json.loads(ai_response_content)
+        raw_content = completion.choices[0].message.content
+        ai_data = json.loads(raw_content)
         
-        # Convert JSON findings into our Python Finding objects
-        findings = [Finding(**f) for f in ai_data.get("findings", [])]
+        # Map JSON to Finding objects
+        findings = []
+        for f in ai_data.get("findings", []):
+            findings.append(Finding(**f))
+            
         decision = ai_data.get("decision", "PASS")
         
     except Exception as e:
-        print(f"Error calling Groq API: {e}")
-        # Fallback if AI fails
+        print(f"API Error: {e}")
         findings = []
         decision = "ERROR"
 
-    end_time = time.time()
-    
     return ScanResponse(
         findings=findings,
         decision=decision,
-        scan_time_ms=int((end_time - start_time) * 1000)
+        scan_time_ms=int((time.time() - start_time) * 1000)
     )
