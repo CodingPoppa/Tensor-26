@@ -16,3 +16,5 @@ def get_user(user_id):
 def run_command():
     # SAFE: controlled command
     os.system("echo Hello World")
+
+print("hello world")
