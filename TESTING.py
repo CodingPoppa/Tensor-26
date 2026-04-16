@@ -1,26 +1,17 @@
 import os
 import sqlite3
-import subprocess
 
-# ❌ VULNERABILITY: Hardcoded Secret (A07:2021)
-# Your scanner looks for 'password' + '=' + quotes
-admin_password = "super-secret-password-123"
+# ✅ SAFE: Using environment variables instead of hardcoded strings
+db_password = os.getenv("DB_PASSWORD")
+api_token = os.getenv("API_KEY")
 
-def delete_user(user_id):
+def get_user_data(user_id):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
     
-    # ❌ VULNERABILITY: SQL Injection (A03:2021)
-    # Your scanner looks for 'select' or 'delete' combined with '+' or '%'
-    query = "DELETE FROM users WHERE id = " + user_id
-    cursor.execute(query)
+    # ✅ SAFE: Using parameterized queries (?) 
+    # Your scanner has a specific check to 'continue' (skip) if it sees '?'
+    query = "SELECT * FROM users WHERE id = ?"
+    cursor.execute(query, (user_id,))
     
-    conn.commit()
-
-def ping_server(ip_address):
-    # ❌ VULNERABILITY: Command Injection (A03:2021)
-    # Your scanner looks for 'os.system' or 'shell=true'
-    os.system("ping -c 1 " + ip_address)
-    
-    # This would also trigger your scanner:
-    # subprocess.run(f"ls {ip_address}", shell=True)
+    return cursor.fetchone()
