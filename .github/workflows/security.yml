@@ -5,9 +5,20 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  test-trigger:
+  scan:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Say hello
-        run: echo " Trigger is working!"
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get git diff
+        run: |
+          git fetch origin main
+          git diff origin/main > diff.txt
+
+      - name: Show diff (for testing)
+        run: |
+          echo "===== DIFF START ====="
+          cat diff.txt
+          echo "===== DIFF END ====="
