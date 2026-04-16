@@ -13,24 +13,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2️⃣ Extract diff between PR and base branch
+      # 2️⃣ Extract diff from PR
       - name: Get PR diff
         run: |
           git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > diff.txt
 
-      # 3️⃣ Show diff (debugging)
+      # 3️⃣ Show diff (for debugging)
       - name: Show diff
         run: |
           echo "===== DIFF START ====="
           cat diff.txt
           echo "===== DIFF END ====="
 
-      # 4️⃣ Send diff to your backend and evaluate result
+      # 4️⃣ Send diff to backend + evaluate result
       - name: Run vulnerability scan
         run: |
           DIFF=$(cat diff.txt | sed 's/"/\\"/g')
 
-          RESPONSE=$(curl -s -X POST https://YOUR_BACKEND_URL/api/scan \
+          RESPONSE=$(curl -s -X POST https://idiocy-circulate-erasure.ngrok-free.dev/api/scan \
           -H "Content-Type: application/json" \
           -d "{\"diff\":\"$DIFF\",\"language\":\"python\"}")
 
