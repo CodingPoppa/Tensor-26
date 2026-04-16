@@ -1,0 +1,13 @@
+name: DevSecOps Scanner
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test-trigger:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Say hello
+        run: echo " Trigger is working!"
