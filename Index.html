@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEC-AI | Integration Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Fira+Code:wght@400;500&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .font-mono {
+            font-family: 'Fira Code', monospace;
+        }
+
+        .code-glow {
+            box-shadow: 0 0 20px rgba(37, 99, 235, 0.1);
+        }
+
+        /* Custom scrollbar for code block */
+        pre::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        pre::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        pre::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-slate-200 min-h-screen p-6 md:p-12">
+
+    <header class="max-w-5xl mx-auto mb-12 flex justify-between items-center">
+        <div>
+            <h1
+                class="text-3xl font-extrabold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+                SEC-AI ONBOARDING
+            </h1>
+            <p class="text-slate-500 mt-2">Connect your repository to the AI Scanner in seconds.</p>
+        </div>
+        <div class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-full">
+            <div id="status-dot" class="w-2 h-2 rounded-full bg-slate-600 transition-colors duration-500"></div>
+            <span class="text-xs font-mono uppercase tracking-widest text-slate-400">System Ready</span>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-12">
+
+        <div class="lg:col-span-1 space-y-10">
+            <section>
+                <div class="flex items-center gap-3 mb-4">
+                    <span
+                        class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-sm">1</span>
+                    <h3 class="text-xl font-semibold italic text-white tracking-tight">Tunnel Setup</h3>
+                </div>
+                <div class="bg-slate-900 p-5 rounded-xl border border-slate-800">
+                    <label class="block text-[10px] font-bold uppercase text-slate-500 mb-2">Backend Ngrok URL</label>
+                    <input id="ngrokInput" type="text" value="https://abc-123.ngrok-free.dev"
+                        class="w-full bg-black border border-slate-700 rounded-md p-2 text-blue-400 font-mono text-sm focus:outline-none focus:border-blue-500 transition-all" />
+                    <button onclick="testConnection()" id="testBtn"
+                        class="mt-4 w-full py-2 bg-slate-800 hover:bg-slate-700 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all active:scale-95">
+                        <span>Test Connection</span>
+                    </button>
+                </div>
+            </section>
+
+            <section>
+                <div class="flex items-center gap-3 mb-4">
+                    <span
+                        class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-sm">2</span>
+                    <h3 class="text-xl font-semibold italic text-white tracking-tight">GitHub Config</h3>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex gap-3 text-sm text-slate-400">
+                        <i data-lucide="shield-check" class="text-blue-500 shrink-0" size="18"></i>
+                        <p>Go to <b>Settings > Actions</b> and enable <b>Read and write permissions</b>.</p>
+                    </div>
+                    <div class="flex gap-3 text-sm text-slate-400">
+                        <i data-lucide="file-plus" class="text-emerald-500 shrink-0" size="18"></i>
+                        <p>Create <code>.github/workflows/security.yml</code> in your repository.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="lg:col-span-2">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <span
+                        class="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-sm">3</span>
+                    <h3 class="text-xl font-semibold italic text-white tracking-tight">Generate & Paste</h3>
+                </div>
+                <button onclick="copyCode()" id="copyBtn"
+                    class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-all active:scale-95 shadow-lg shadow-blue-900/20">
+                    <i data-lucide="copy" size="16"></i>
+                    <span>Copy Code</span>
+                </button>
+            </div>
+
+            <div class="relative group code-glow">
+                <div
+                    class="absolute -inset-1 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-xl blur opacity-20 group-hover:opacity-30 transition duration-1000">
+                </div>
+                <div class="relative bg-black rounded-xl border border-slate-800 overflow-hidden">
+                    <div class="flex items-center gap-2 px-4 py-2 border-b border-slate-800 bg-slate-900/50">
+                        <div class="w-3 h-3 rounded-full bg-red-500/30"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-500/30"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-500/30"></div>
+                        <span class="text-[10px] font-mono ml-2 text-slate-600 tracking-widest">WORKFLOW YAML</span>
+                    </div>
+                    <pre
+                        class="p-6 overflow-x-auto text-blue-100 font-mono text-sm leading-relaxed"><code id="yamlDisplay"></code></pre>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const ngrokInput = document.getElementById('ngrokInput');
+        const yamlDisplay = document.getElementById('yamlDisplay');
+        const copyBtn = document.getElementById('copyBtn');
+        const testBtn = document.getElementById('testBtn');
+        const statusDot = document.getElementById('statusDot');
+
+        function generateYaml(url) {
+            return `name: AI Security Scanner
+permissions:
+  contents: read
+  pull-requests: write
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run AI Scan
+        run: |
+          jq -n --arg d "$(git diff origin/\${{ github.event.pull_request.base.ref }})" '{diff: $d, language: "python"}' > payload.json
+          curl -s -X POST ${url}/api/scan \\
+          -H "Content-Type: application/json" -d @payload.json > result.json`;
+        }
+
+        function updateDisplay() {
+            yamlDisplay.textContent = generateYaml(ngrokInput.value);
+        }
+
+        async function copyCode() {
+            await navigator.clipboard.writeText(yamlDisplay.textContent);
+            const originalHtml = copyBtn.innerHTML;
+            copyBtn.innerHTML = `<i data-lucide="check" size="16"></i><span>Copied!</span>`;
+            copyBtn.classList.replace('bg-blue-600', 'bg-emerald-600');
+            lucide.createIcons(); // refresh icons
+
+            setTimeout(() => {
+                copyBtn.innerHTML = originalHtml;
+                copyBtn.classList.replace('bg-emerald-600', 'bg-blue-600');
+                lucide.createIcons();
+            }, 2000);
+        }
+
+        function testConnection() {
+            testBtn.textContent = "Testing...";
+            testBtn.classList.add('opacity-50');
+
+            setTimeout(() => {
+                testBtn.innerHTML = `<span>Connection Success</span><i data-lucide="check" class="text-emerald-400"></i>`;
+                testBtn.classList.replace('bg-slate-800', 'bg-slate-900');
+                statusDot.classList.replace('bg-slate-600', 'bg-emerald-500');
+                statusDot.classList.add('animate-pulse');
+                lucide.createIcons();
+            }, 1500);
+        }
+
+        // Initialize
+        ngrokInput.addEventListener('input', updateDisplay);
+        updateDisplay();
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
